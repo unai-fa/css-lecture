@@ -1,0 +1,70 @@
+---
+title: "Introduction to R Markdown"
+subtitle: Exercise 1
+output: pdf_document
+---
+
+This notebook is meant as a small playground to get more comfortable
+with using R Markdown. For a quick overview of the most important functionalties 
+check out the R Markdown [cheat sheet](https://rmarkdown.rstudio.com/lesson-15.html).
+The cheat sheet is also available under (*Help -> Cheat Sheets*) in RStudio. For more in depth information the official R Markdown site might be a good starting point [https://rmarkdown.rstudio.com](https://rmarkdown.rstudio.com).
+
+## R Markdown fundamentals
+
+Produce an output document from the R Markdown file 
+by clicking on the *Knit* button. Run the code chunk below.
+
+```{r cars}
+str(cars)
+```
+
+Insert and run a new code chunk to calculate the mean speed and mean stopping distance of the cars.
+
+*... \# your work here*
+
+## Markdown Formatting
+
+Create an unordered list containing three git commands. Make the first item bold, the second italic and display the last item as inline code.
+
+*... \# your work here*
+
+Insert a link to http://example.edu with the caption text *example*.
+
+*... \# your work here*
+
+Write down the Poisson distribution using inline math.
+
+*... \# your work here*
+
+## Chunk Options
+
+Insert a new code chunk containing `3 * 2` and name it *simple calculation*.
+
+*... \# your work here*
+
+Create a new chunk called setup and use it to load the `ggplot2` package. Ensure that the
+code chunk and its output is not included in the final document.
+
+*... \# your work here*
+
+Plot a scatter plot of car `dist` against `speed`. Prevent the code from being displayed in the output document.
+
+*... \# your work here*
+
+## Inline Code
+
+You can add inline code into an R Markdown file. Fill in the gaps of the sentence below
+with the appropriate inline code.
+
+The `cars` data frame contains ... observations. The highest speed recorded in
+the data frame is ... .
+
+## YAML Header
+
+Set the default output as PDF or HTML document in the YAML header. Note that producing a PDF will require LaTeX to be installed on your computer.
+
+You can use the YAML header to define parameters for your report. This is especially useful, if you might need to produce a similar report multiple times. Declare a parameter named `color` in the YAML header, and assign a sensible value to it. Add a new code chunk containing the same scatter plot from above, but
+make the color of the data points dependent on the parameter value set in the YAML header.
+
+
+

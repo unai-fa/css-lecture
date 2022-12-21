@@ -1,0 +1,122 @@
+---
+title: "Introduction to SQL"
+date: "2022-11-01"
+---
+
+## Setup
+
+```{r setup, message = FALSE}
+library(tidyverse)
+library(DBI)
+library(dbplyr)
+```
+
+## Connecting to the database
+
+We will begin by connecting to a local SQLite Database using the `DBI` package, with `RSQLite` as a backend. You might need to install the `RSQLite` package first. Make sure that the database file is in the same directory as the R Markdown file or adjust the path accordingly.
+
+```{r db connection}
+con <- dbConnect(
+  RSQLite::SQLite(),
+  "chinook.db",
+)
+con 
+```
+
+We can check if the connection was successful by listing the available tables in the database.
+
+```{r show tables}
+dbListTables(con)
+```
+
+## SQL queries
+
+Write and execute your first SQL query and display the first 10 entries in the `artists` table.
+
+*... \# your work here*
+
+Get an idea of the dimensions of the `invoices` table by writing a query that returns the number of rows.
+
+*... \# your work here*
+
+Select the first 10 rows of the `CustomerId`, `BillingCity` and `BillingCountry` column from the `invoices` table.
+
+*... \# your work here*
+
+Now, write a SQL query that returns a unique list of the billing countries.
+
+*... \# your work here*
+
+###  Logical clauses
+
+Using the `customers` table, display a table containing all customers that are from Germany.
+
+*... \# your work here*
+
+Use the `BETWEEN` operator in the `WHERE` clause to filter the `tracks` table for all songs that have a length between 30 and 40 seconds.
+
+*... \# your work here*
+
+From the `customers` table select all customers whose city name starts with a "P". 
+
+*... \# your work here*
+
+### Grouping 
+
+Count the number of invoices for each country. Order the results by the resulting counts, starting with the highest number.
+
+*... \# your work here*
+
+Display the average `Total` invoice grouped by country.
+
+*... \# your work here*
+
+Make use of the `HAVING` clause and only display the countries with more than 20 invoices.
+
+*... \# your work here*
+
+You can also use dates for grouping. Count the number of invoices in the year 2013 grouped by month. In a `SQLite` database you can extract date information from the `InvoiceDate` column using the `strftime()` function. You can find additional documentation on date functions in `SQLite` [here](https://www.sqlite.org/lang_datefunc.html).
+
+*... \# your work here*
+
+### Joins
+
+Write a SQL query that returns a table containing all InvoiceIDs matched with the respective customer name and phone number.
+
+*... \# your work here*
+
+Now write a query that provides the name of the tracks that were purchased with each invoice. Display the invoice id and the track name column. Hint: You will need to take into account three tables: `invoices`, `invoice_items` and `tracks`.
+
+*... \# your work here*
+
+### Subqueries
+
+As seen in the lecture, you can nest SQL queries to stack multiple operations. Provide a query that shows the three youngest employees.
+
+*... \# your work here*
+
+Find the customer name that overall spent the most money in the store. You can do so by checking, whose customers invoices add up to the largest amount. Note that there are multiple ways to approach this task.
+
+*... \# your work here*
+
+## SQL and dbplyr
+
+As discussed in the lecture, you can also make use of `dplyr` commands via the the database backend `dbplyr` package. It allows you to work on the database tables as if they were local data frames. Retrieve the `invoices` table using the `tbl()` function.
+
+*... \# your work here*
+
+Using `dplyr` syntax, filter the table for all invoices with Germany as `BillingCountry`.
+
+*... \# your work here*
+
+Display the last operation as SQL query.
+
+*... \# your work here*
+
+## Close the connection
+
+After you are finished with your work, always close the database connection.
+
+```{r}
+dbDisconnect(con)
+```

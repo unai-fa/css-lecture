@@ -1,0 +1,217 @@
+---
+title: "PCA & Clustering"
+subtitle: Exercise 5
+output: html_document
+date: "2022-12-02"
+---
+
+# Setup
+
+```{r, include = FALSE, message = FALSE}
+library(tidyverse)
+library(factoextra)
+library(tidycensus)
+library(gridExtra)
+```
+
+# Data
+
+In this notebook, we use the Census API to gather data from the American Community Survey (ACS). This requires an access key, which can be obtained here:
+
+*https://api.census.gov/data/key_signup.html*
+
+Add your API key into the function below.
+
+```{r}
+census_api_key("YOUR API KEY")
+```
+
+To get the right variables for a census survey, you need to know the right variable IDs you are interested in. You can load all the variables using the `load_variables` function, and then browse them inside `R`. Don't worry you do not need to select releveant variables yourself, they will be given to you in the next box. You can find out more about the census API at *https://www.census.gov/data/developers/guidance/api-user-guide.html*.
+
+```{r}
+census_variables <- load_variables(2019, "acs5", cache = TRUE)
+head(census_variables)
+```
+
+We will now define all the variable IDs we want to load in through the census API. 
+
+```{r}
+race_variables <- c(
+    white = "B03002_003",
+    black = "B03002_004",
+    asian = "B03002_006",
+    hispanic = "B03002_012"
+  )
+
+home_variables <- c(
+   median_home_value = "B25077_001",
+   # median_number_of_rooms = "B25018_001",
+   median_year_built = "B25037_001",
+   owner_occupied = "B25003_002",
+   renter_occupied = "B25003_003",
+   total_occupied = "B25003_001"
+  )
+
+age_inc_variables <- c(
+   median_age = "B01002_001",
+   per_capita_income = "B19301_001",
+   total_population = "B01001_001"
+)
+
+```
+
+We know load in the relevant data and merge it into a single dataframe. We are going to make use of census data from the Wayne County, which lies at the center of Detriot.
+
+```{r message = FALSE, results = 'hide'}
+wy_acs_race <- get_acs(
+  geography = "tract",
+  variables = race_variables, 
+  state = "MI",
+  county = "Wayne",
+  geometry = FALSE,
+  survey = 'acs5',
+  year = 2019,
+  summary_var = 'B01001_001'
+)  %>% arrange(GEOID) %>%
+   mutate(estimate = estimate / summary_est) %>%
+  select(-NAME, -moe, -summary_est, -summary_moe) %>% 
+  pivot_wider(names_from = variable, values_from = estimate)
+
+wy_acs_home <- get_acs(
+  geography = "tract",
+  variables = home_variables, 
+  state = "MI",
+  county = "Wayne",
+  geometry = FALSE,
+  survey = 'acs5',
+  year = 2019,
+)  %>% arrange(GEOID) %>%
+  select(-NAME, -moe) %>% 
+  pivot_wider(names_from = variable, values_from = estimate) %>% 
+  mutate(owner_occupied = owner_occupied / total_occupied,
+         renter_occupied = renter_occupied / total_occupied)
+
+wy_acs_age_inc <- get_acs(
+  geography = "tract",
+  variables = age_inc_variables, 
+  state = "MI",
+  county = "Wayne",
+  geometry = FALSE,
+  survey = 'acs5',
+  year = 2019,
+)  %>% arrange(GEOID) %>%
+  select(-NAME, -moe) %>% 
+  pivot_wider(names_from = variable, values_from = estimate)
+
+wy_acs <- wy_acs_race %>% 
+  left_join(wy_acs_home) %>% 
+  left_join(wy_acs_age_inc) %>% 
+  drop_na()
+```
+
+You can now inspect the dataset we will use for our analysis.
+
+```{r}
+head(wy_acs)
+```
+We can now visualize our data on a map by requesting the geometry of each tract
+in Wayne County from the census API.
+
+```{r message = FALSE, results = 'hide'}
+wy_geo <- get_acs(
+  geography = "tract",
+  variables = age_inc_variables, 
+  state = "MI",
+  county = "Wayne",
+  geometry = TRUE,
+  survey = 'acs5',
+  year = 2019,
+)  %>%
+select(-moe, -NAME, -estimate, -variable) %>%
+distinct()
+```
+
+We can now join the data we loaded in above with the geographic information.
+
+```{r}
+wy_map <- wy_geo %>% 
+  left_join(wy_acs)
+```
+
+For instance, we can visualize the per capita income in Wayne county.
+
+```{r fig.height = 6.5, fig.width = 6.5}
+wy_map %>% ggplot(aes(fill = per_capita_income)) +
+  geom_sf() + scale_fill_viridis_c(labels = scales::dollar)
+```
+
+Detriot is to this day one of the most segregated cities in the US. Visualize the population estimates for non-Hispanic white and black populations in Wayne County.
+
+*... \# your work here*
+
+# Principal Component Analysis
+
+As discussed in the lecture, dimensionality reduction can be performed for a variety of reasons, for instance for making models and data more interpretable or allowing for convenient visualization of a high-dimensional feature space. In some cases, dimensionality reduction is used to improve performance of ML models by removing redundant or unimportant features, and in turn alleviating the so called "curse of dimensionality". For instance, a $k$-means algorithm using an euclidean distance metric will likely struggle in high-dimensional feature spaces, where the distances between points becomes more and more similar. 
+
+Of course, we want to lose as little as possible information when using a dimensionality reduction technique. In PCA this is done by transforming the data into a new set of dimensions. These so called principal components are orthogonal to each other, and are ordered according to the variance across each dimension, with the first component having the highest variance.
+
+Here, our data is still relatively low-dimensional, but we will still apply PCA before clustering, as it usually makes clustering algorithms more effective and will later aid us in the visualization of different cluster regions.
+
+Apply PCA on the `wy_acs` data. Do not forget to remove all non-feature columns from the dataframe. PCA can be performed using the `prcomp()` function. Make sure that the data gets normalized before computing PCA by setting the right arguments in the `prcomp()` function. Print the `summary()` of the results. How much variance is explained by the first component?
+
+*... \# your work here*
+
+Visualize the variance and cumulative variance proportion for all principal components. *Hint:* You can find the standard deviations of the principal components in the `sdev` column.
+
+*... \# your work here*
+
+Use the `fviz_pca_var()` function from the `factoextra` package to visualize how each variable 
+influences the first two principal components. Describe the biggest influences on the first two principal components.
+
+*... \# your work here*
+
+# Clustering
+
+## $k$-means Clustering
+
+We will now use $k$-means to cluster the PCA data. As we are still working with relatively low-dimensional data, it is not 
+really necessary to drop any of the lower variance principal components. You might already have a hunch on the optimal number of clusters $k$, but it is good practice to try to determine the optimal $k$.
+There exist various methods for finding the right $k$, the most popular being the "Elbow" method. Plot the total within sums of squares at each cluster for different $k$. You can do this conveniently by using the `fviz_nbclust()` function from the `factoextra` package.
+
+*... \# your work here*
+
+As an additional criteria, you can use the same function to calculate the silhouette coefficient for different numbers of clusters. Use both approaches in conjunction and decide on a likely optimal number of clusters $k$.
+
+*... \# your work here*
+
+Now that you have some idea what a reasonable number of clusters $k$ is, apply `kmeans()` to the PCA data.
+
+*... \# your work here*
+
+Visualize the cluster assignments by plotting the first two principal components against each other, and then coloring the points depending on the cluster they are part of. Add the cluster centers to the plot.
+
+*... \# your work here*
+
+Visualize the clusters on the map of Wayne County. 
+
+*... \# your work here*
+
+## Hierarchical Clustering
+
+Hierarchical clustering has the advantage that we do not need to determine the appropriate number of clusters before applying the algorithm. To apply hierarchical clustering, first compute the distance matrix using the `dist()` function on the PCA data. Next, use the `hclust()` function on the distance data to cluster the different tracts. For instance, you can use the ward method by specifying `method = ward.D2`.
+
+*... \# your work here*
+
+Plot the corresponding dendogram using the `plot()` function.
+
+*... \# your work here*
+
+Next, you have to decide where to cut the dendogram to give you a certain number of clusters. You can do so my applying the `cutree()` function on the clustered data. 
+
+*... \# your work here*
+
+Visualize the clusters in the dendogram by using the `rect.hclust()` function after plotting the dendogram.
+
+*... \# your work here*
+
+Finally, feel free to repeat the analysis with different counties and states. 
