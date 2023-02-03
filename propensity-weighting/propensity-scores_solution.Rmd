@@ -1,0 +1,228 @@
+---
+title: "Nonprobability Samples"
+subtitle: "Exercise 7"
+date: "2023-01-20"
+---
+
+
+```{r include = FALSE, message = FALSE}
+library(tidyverse)
+library(patchwork)
+library(readr)
+library(haven)
+library(labelled)
+library(partykit)
+library(cobalt)
+```
+
+In this notebook, we will use survey data from Pew Research Center to learn how to adjust non-probability samples so they more closely resemble a target population of interest. The adjustment method we will use is called Propensity Weighting. 
+
+
+## Data preparation
+
+The data and the following pre-processing steps were made available by [Pew Research Center](https://www.pewresearch.org/methods/2018/01/26/for-weighting-online-opt-in-samples-what-matters-most/). The non-probability sample is made up of three large online opt-in surveys. We can not expect that this sample accurately represents the large population of interest without having any direct control over the selection mechanism. Here, our target population are US adults. To adjust for the bias, we need a high quality dataset that represents our population of interest. Here, a synthetic reference dataset is constructed out of several benchmark surveys. The exact process is not relevant to our task at hand, but if you are interested in how exactly this is done, you can follow the link above.
+
+```{r}
+pew_nonprob <- read_sav(file = "survey_data.sav")
+pew_prob <- read_sav(file = "synthetic_data.sav")
+```
+
+We now define the variables that are going to be used to adjust the non-probability sample, and our target variable of interest. The adjustment variables mostly contain demographics and information on political attitudes. The variable of interest in our example describes if a participant voted in the 2014 midterm election. 
+
+```{r}
+adjustment_vars <- c("AGECAT6", "GENDER", "EDUCCAT5", "RACETHN", "DIVISION",
+                     "AGE", "FAMINC5", "EMPLOYED",
+                     "PARTYSCALE3", "IDEO3", "EVANG_PROTESTANT", "REGISTERED")
+
+target_vars <- c("VOTE14")
+```
+
+Before taking a closer look at the data, we do some final pre-processing steps.
+
+```{r}
+pew_nonprob <- pew_nonprob %>%
+  mutate(EVANG_PROTESTANT = case_when(to_character(RELIGCAT) == "Evangelical Protestant" ~ "Evangelical Protestant", TRUE ~ "Other")) %>%
+  mutate_at(adjustment_vars, to_factor)
+
+pew_prob <- pew_prob %>%
+  mutate(
+      AGECAT6 = case_when(
+        AGE >= 18 & AGE <= 24 ~ "18-24",
+        AGE >= 25 & AGE <= 34 ~ "25-34",
+        AGE >= 35 & AGE <= 44 ~ "35-44",
+        AGE >= 45 & AGE <= 54 ~ "45-54",
+        AGE >= 55 & AGE <= 64 ~ "55-64",
+        AGE >= 65 ~ "65+"),
+    PARTYSCALE3 = case_when(
+      to_character(PARTYSCALE5) %in% c("Democrat") ~ "Democrat",
+      to_character(PARTYSCALE5) %in% c("Republican") ~ "Republican",
+      to_character(PARTYSCALE5) %in% c("Lean Democrat", "Lean Republican", "Ind/No Lean") ~ "Independent/Other/Ref"),
+    EVANG_PROTESTANT = case_when(
+      to_character(RELIGCAT) == "Evangelical Protestant" ~ "Evangelical Protestant",
+      TRUE ~ "Other")) %>%
+  mutate_at(adjustment_vars, to_factor)
+
+pew_prob <- pew_prob %>%
+  mutate_at(target_vars, to_factor) %>%
+  mutate_at(target_vars, fct_expand, "Refused")
+
+pew_nonprob <- pew_nonprob %>%
+  mutate_at(target_vars, to_factor)
+
+pew_prob <- pew_prob %>%
+  mutate(Data_Source = "Prob. Sample") %>%
+  select(Data_Source, adjustment_vars, target_vars) %>% 
+  drop_na(adjustment_vars, target_vars) %>% 
+  filter(VOTE14 != 'Refused') %>% 
+  mutate(AGE = as.numeric(AGE))
+
+pew_nonprob <- pew_nonprob %>%
+  mutate(Data_Source = "Nonprob. Sample") %>%
+  select(Data_Source, adjustment_vars, target_vars) %>% 
+  drop_na(adjustment_vars, target_vars) %>% 
+  filter(GENDER != 'Refused' & EDUCCAT5  != 'Refused' & RACETHN
+         != 'Refused' & FAMINC5  != 'Refused' & EMPLOYED  != 'Refused' & IDEO3  != 'Refused'
+         & REGISTERED  != 'Refused' & VOTE14 != 'Refused') %>%
+  droplevels() %>% 
+  mutate(AGE = as.numeric(AGE))
+
+pew_prob$VOTE14 <- fct_recode(
+  pew_prob$VOTE14, 
+  Not_Voted = "Did not vote (includes too young to vote)")
+
+pew_nonprob$VOTE14 <- fct_recode(
+  pew_nonprob$VOTE14, 
+  Not_Voted = "Did not vote (includes too young to vote)")
+
+pew_data <- pew_prob %>%
+  bind_rows(pew_nonprob)
+
+pew_data$Data_Source <- factor(
+  x = pew_data$Data_Source,
+  levels = c("Nonprob. Sample", "Prob. Sample"))
+
+```
+
+
+## Covariate Balance
+
+Plot the distribution for some of the adjustment variables for both data sources to get a sense how much both samples differ. A convenient way to plot the distributional balance is the `bal.plot` function from the `cobalt` package. 
+
+*... \# your work here*
+
+```{r} 
+plot_GENDER <- pew_data %>%
+bal.plot(treat = pew_data$Data_Source, var.name = 'GENDER')
+
+plot_AGE <- pew_data %>%
+bal.plot(treat = pew_data$Data_Source, var.name = 'AGE')
+
+plot_RACETHN <- pew_data %>%
+bal.plot(treat = pew_data$Data_Source, var.name = 'RACETHN') + 
+  scale_x_discrete(guide = guide_axis(n.dodge=4))
+  
+plot_FAMINC5 <- pew_data %>%
+bal.plot(treat = pew_data$Data_Source, var.name = 'FAMINC5') + 
+  scale_x_discrete(guide = guide_axis(n.dodge=5))
+
+plot_REGISTERED <- pew_data %>%
+bal.plot(treat = pew_data$Data_Source, var.name = 'REGISTERED')
+
+plot_PARTY_SCALE <- pew_data %>%
+bal.plot(treat = pew_data$Data_Source, var.name = 'PARTYSCALE3') + 
+  scale_x_discrete(guide = guide_axis(n.dodge=5))
+
+```
+
+```{r}
+(plot_GENDER + plot_AGE)
+```
+
+```{r}
+ (plot_RACETHN + plot_FAMINC5)
+```
+
+
+```{r}
+(plot_REGISTERED + plot_PARTY_SCALE)
+```
+
+Calculate the (standardized) mean difference between both samples for all continuous variables and the raw differences in proportion for all one-hot encoded categorical variables. Make use of the `bal.tab` function form the `cobalt` package to easily calculate the scores. `cobalt` will automatically convert all the levels of the categorical variables into binary variables. The `treat` parameter in the function needs to be given the column that determines the sample membership of each individual (here `Data_Source`). Feel free to play around with the different statistics that `bal.tab` can compute. 
+
+These balancing scores give us a convenient baseline to compare the similarity between both samples before and after propensity score weighting. Of course this only tells us part of the story, so it can be useful to compare higher moments, and to check the distribution of the variables as we did above. 
+
+*... \# your work here*
+
+```{r}
+pew_data %>% select(-Data_Source, -VOTE14) %>% 
+  bal.tab(treat = pew_data$Data_Source)
+```
+Finally, plot the distribution of our variable of interest *VOTE14* for both samples. Of course, you normally would not have access to the distribution in the probability sample. Determine the estimation error $$(\tilde{\mu}-\mu_t)$$ if we naively would use the rate of people that claim to have voted $$\tilde{\mu}$$ from the non-probability sample as an estimate for the value $$\mu_t$$ from the target population.
+
+*... \# your work here*
+
+```{r}
+pew_data %>% bal.plot(treat = pew_data$Data_Source, var.name = 'VOTE14')
+```
+
+```{r}
+pew_data %>% 
+  select(VOTE14) %>% 
+  bal.tab(treat = pew_data$Data_Source)
+```
+
+## Propensity Score Estimation
+
+Estimate the propensity scores of all adjustment variables using logistic regression.
+
+*... \# your work here*
+
+```{r}
+propensityscore_model <- glm(data = pew_data, formula = Data_Source ~ AGECAT6 + GENDER + EDUCCAT5 +
+      RACETHN + AGE + FAMINC5 + EMPLOYED + PARTYSCALE3 + IDEO3 +
+      EVANG_PROTESTANT + REGISTERED, family = binomial(link = 'logit'))
+```
+
+Create a new columns `pProb` and `pNonProb` in the dataset that contain the predicted probability of each individual being assigned to the probability or non-probability sample.
+
+*... \# your work here*
+
+```{r}
+pew_data$pProb <- predict(propensityscore_model, type = 'response')
+pew_data$pNonProb <- 1 - pew_data$pProb
+```
+
+Plot a histogram of the propensity scores for all individuals in the data.
+
+*... \# your work here*
+
+```{r}
+ggplot(data = pew_data, aes(x = pNonProb)) +
+  geom_histogram() + facet_wrap(Data_Source ~ .)
+```
+
+## Inverse Propensity Score Weighting
+
+Using the estimated sampling probabilities calculate the respective weight for each individual in the non-probability sample. For individuals from the probability sample simply set the weight to $1$.
+
+*... \# your work here*
+
+```{r}
+pew_data <- pew_data %>% mutate(weights = if_else(Data_Source == 'Nonprob. Sample' , pProb / pNonProb, 1))
+```
+
+A convenient way too visualize the covariate balance before and after adjustment is the so called Love plot. You can generate a Love plot using the `love.plot` function from the `cobalt` package. You will need to specify the weights of each individual in the `weights` parameter.
+
+*... \# your work here*
+
+```{r fig.height=6, fig.width=4}
+pew_data %>% select(-Data_Source, -pProb, -pNonProb, -VOTE14, -weights) %>% love.plot(treat = pew_data$Data_Source, weights = pew_data$weights, thresholds = 0.1)
+```
+
+Finally, estimate and plot the proportion of people that claim to have voted (`VOTE14`) in the probability sample by reweighing the estimate from the non-probability sample. Are you happy with the result? If you are not, do you have an idea what might cause the remaining estimation error?
+
+*... \# your work here*
+
+```{r}
+pew_data %>% bal.plot(treat = pew_data$Data_Source, weights = pew_data$weights, var.name = 'VOTE14', which = 'both')
+```
