@@ -1,0 +1,306 @@
+---
+title: "APIs for Social Science"
+subtitle: Exercise 2
+output: pdf_document
+---
+
+```{r}
+library("usethis")
+library("httr2")
+library("jsonlite")
+library("stringr")
+library("devtools")
+library("gtrendsR")
+library("ggplot2")
+library("dplyr")
+library("RedditExtractoR")
+library("osmdata")
+library("spotifyr")
+library("censusapi")
+```
+
+## Introduction
+
+In this exercise, we will explore different APIs useful for social science research. A comprehensive overview of different APIs can be found [here](https://bookdown.org/paul/apis_for_social_scientists/). If you encounter difficulties, feel free to refer to this resource. Please note that we won't provide all the details required to make these APIs work here; part of the challenge is to navigate through documentation and tutorials if you encounter issues during your exploration. When you work on your research project, we encourage you to proactively seek out new data sources and APIs.
+
+Remember that the availability of specific APIs may change, such as Twitter's discontinuation of free access for academic research. Always review the developer agreement from the respective API provider to ensure compliance.
+
+## Authentication
+
+API providers typically require user identification for API calls, commonly done through the use of API keys. However, it's considered poor practice to hardcode your API key directly into your code, especially if you intend to share your code with others. To safeguard your authentication information, it's recommended to store it in environment variables. This can be achieved by adding them to your `.Renviron` file (for added convenience, you can use the `usethis` package). If you're unsure about the process, refer to [this](https://bookdown.org/paul/apis_for_social_scientists/best-practices.html#dont-hardcode-authentication-information-into-your-r-code) for guidance.
+
+```{r}
+usethis::edit_r_environ(scope = "user")
+```
+
+# Intro to APIs
+
+The `httr2` package allows us to easily send API requests from within R using the `request()` and `req_perform()` function. As a basic example, retrieve the current location of the International Space Station via this url http://api.open-notify.org/iss-now.json. Examine the resulting object. Where can you check if the API call was successful? 
+
+*... \# your work here*
+```{r}
+url <- "http://api.open-notify.org/iss-now.json"
+request <- request(url)
+res <- request %>% req_perform()
+res
+```
+The data in this case was returned as a json file. Use the `resp_body_json()` function to extract the data we're interested in.
+
+*... \# your work here*
+```{r}
+resp_body_json(res)
+```
+You can also provide additional parameters with your API request in form of a query. For example, lets use the open source weather API [Bright Sky](https://brightsky.dev/docs/#/) to retrieve the weather data from the DWD – Germany's meteorological service. Retrieve data on the current weather at specific weather station near Munich. Use the `req_url_query()` function to pass the wmo station id parameter (here: "10865").
+
+*... \# your work here*
+```{r}
+url <- "https://api.brightsky.dev/current_weather"
+request <- request(url) %>% req_url_query(wmo_station_id = "10865")
+weather_data <- request %>% req_perform()
+weather_data
+```
+Extract the data on the current temperature.
+
+*... \# your work here*
+```{r}
+weather_data_extracted <- weather_data %>% resp_body_json()
+weather_data_extracted$weather$temperature
+```
+
+# NY Times Books API
+
+Create a developer account at the NY Times (https://developer.nytimes.com/get-started) and create a new app to retrieve an API key and store in your R environment. 
+
+The Books API (https://developer.nytimes.com/docs/books-product/1/overview) allows for the retrieval of information on book reviews and best seller lists. The NY Times also offers a selection of other APIs (https://developer.nytimes.com/apis) - feel free to explore!
+
+Make a request to the Books API to retrieve reviews for a specific books (of course the book needs to have been actually reviewed by the NY Times in the last years). 
+
+*... \# your work here*
+```{r}
+url <- "https://api.nytimes.com/svc/books/v3/reviews.json"
+request <- request(url) %>%
+  req_url_query(`api-key` = Sys.getenv("NYT_KEY"), title = 'Circe')
+
+book_data <- request %>% req_perform() %>% resp_body_json()
+str(book_data)
+```
+
+# US Census API
+
+The US Census Bureau's data APIs are comprehensive, offering over 1000 available endpoints. To utilize these APIs, you'll need an API key, which you can obtain at this link: https://api.census.gov/data/key_signup.html. Store it as "CENSUS_KEY" in your R enviornment.
+
+Several R packages are available to facilitate interfacing with the Census API, and in this tutorial, we will use the 'censusapi' package to make our initial API calls. As we progress through the lecture, we will conduct more advanced analyses using Census data.
+
+Check out the number of available APIs using the `listCensusApis()` function.
+
+*... \# your work here*
+```{r}
+apis <- listCensusApis()
+#head(apis)
+apis
+```
+
+You can use the `listCensusMetadata()` function to get more information about the variables of a specific API. Lets take a closer look at the variables of the "timeseries/poverty/saipe" API that provides small area estimates on poverty and income in the US (https://www.census.gov/data/developers/data-sets/Poverty-Statistics.html).
+
+*... \# your work here*
+```{r}
+listCensusMetadata(name = "timeseries/poverty/saipe", type ="variables")
+```
+
+Use the same function to retrieve information on the available regions for this API.
+```{r}
+listCensusMetadata(name = "timeseries/poverty/saipe", type ="geography")
+```
+
+We can retrieve data using the `getCensus()` function. In this case, this requires the name of the API, the relevant variables, region and time.
+
+Retrieve the percentage of people in poverty ("SAEPOVRTALL_PT") and the median household income estimate ("SAEMHI_PT") in 2020 per state. *Hint*: Specify the region as "state:*".
+
+```{r}
+getCensus(name="timeseries/poverty/saipe",
+    vars=c("NAME", "SAEPOVRTALL_PT", "SAEMHI_PT"), 
+    region="state:*", time=2020)
+```
+
+# Reddit API
+
+Reddit is a popular and influential social media platform that allows users to engage in a variety of activities, such as posting content, participating in discussions, and evaluating the submissions of other users within dedicated sections known as subreddits.
+
+Reddit typically requires authentication via [OAuth2](https://github.com/reddit-archive/reddit/wiki/OAuth2). However, in practice, it's often not strictly necessary to authenticate yourself. In R, the [RedditExtractoR](https://github.com/ivan-rivera/RedditExtractor/tree/master) package serves as a convenient wrapper for accessing the Reddit API.
+
+Look into the documentation of the package, and extract the top post urls from the r/statistics subreddit.
+
+*... \# your work here*
+```{r, eval=FALSE}
+top_stats_urls <- find_thread_urls(subreddit = "statistics", sort_by='top')
+head(top_stats_urls)
+```
+
+Query the r/aww subreddit for the urls of discussions that included the "cat" keyword during last week.
+
+*... \# your work here*
+```{r, eval=FALSE}
+top_aww_cats <- find_thread_urls(subreddit = "aww", keywords = 'cat', sort_by='top')
+head(top_aww_cats)
+```
+
+Extract the content of a specified thread (e.g. one of the urls your collected).
+
+*... \# your work here*
+```{r, eval=FALSE}
+top_stats_post <- get_thread_content(top_stats_urls$url[1])
+head(top_stats_post)
+```
+
+Find subreddits that include have something to do with machine learning. Display the top ten choices sorted by subscriber count.
+
+*... \# your work here*
+```{r, eval=FALSE}
+subreddits_machinelearning <- find_subreddits(keywords = "machine learning")
+
+top_ten_ml_subreddits <- subreddits_machinelearning %>% select(subreddit, title, subscribers) %>% arrange(desc(subscribers))
+rownames(top_ten_ml_subreddits) <- NULL
+
+head(top_ten_ml_subreddits, n = 10)
+```
+
+Retrieve information about a particular user (e.g. "GovSchwarzenegger").
+
+*... \# your work here*
+```{r, eval=FALSE}
+arnold_reddit <- get_user_content('GovSchwarzenegger')
+```
+
+# Open Street Map API
+
+[OpenStreetMap](https://www.openstreetmap.org/) is a international open access mapping project. You can access OSM using the [osmdata](https://github.com/ropensci/osmdata) package.
+
+The OPM API is fairly complicated, so feel free to consult relevant documentation if you are unsure how to proceed. Use the `available_features()` function to get a list of physical features recorded in OSM. You can then use the `available_tags()` function to explore the associated tags for each feature. 
+
+*... \# your work here*
+```{r}
+available_features()
+
+available_tags("amenity")
+```
+
+You have to use a so called bounding box to define geographical area you want to include in your query. Use the `getbb()` function to define a bounding box for Munich.
+
+*... \# your work here*
+```{r}
+location <- getbb(place_name = "Munich")
+```
+
+Use the `opq()`, `add_osm_feature()` and `osmdata_sf()` function to query for all arts centres in Munich. *Hint:* Use the "amenity" feature. 
+
+*... \# your work here*
+```{r}
+arts_center_munich <- opq(bbox = location) %>% 
+  add_osm_feature(key = 'amenity', value = c('arts_centre')) %>% 
+  osmdata_sf()
+```
+
+Extract the highest-performance roads and natural water sources in Munich.
+
+*... \# your work here*
+```{r}
+streets <- opq(bbox = location) %>%
+    add_osm_feature(key = 'highway', value = c('motorway', 'primary', 'highway')) %>% 
+   osmdata_sf()
+
+water <- opq(bbox = location) %>%
+  add_osm_feature(key = 'natural', value = 'water') %>% 
+  osmdata_sf()
+```
+
+Plot the results of all of your queries into one map using the `geom_sf` function. 
+
+*... \# your work here*
+```{r}
+ggplot() + 
+  geom_sf(data = arts_center_munich$osm_points, color = 'red') +
+  geom_sf(data = streets$osm_lines) +
+  geom_sf(data = water$osm_polygons, fill = 'light blue') +
+  theme_minimal() + coord_sf(xlim = c(11.3, 11.7), ylim = c(48.07, 48.25))
+```
+
+
+# Google Trends API
+
+The Google Trends API can be used without additional authentication. In R, we can access the API using the `httr2` package, but for a more user-friendly approach make use of the dedicated `gtrendsR` package. Get the search interest data for "inflation" over the last five years in Germany and the US and plot the result. *Hint:* If you are unsure you can find the relevant country codes in the `data('countries')` dataset. 
+
+*... \# your work here*
+```{r}
+res <- gtrends(c('inflation'), geo=c("DE", "US"))
+plot(res)
+```
+
+Now compare the search interest in "trump" and "biden" in Germany since the beginning of Google Trends.
+
+*... \# your work here*
+```{r}
+res <- gtrends(c('biden', 'trump'), geo = c('DE'), time = 'all')
+plot(res)
+```
+
+# Spotify API
+
+You will need a Spotify Account to access the Spotify API. Once you have a Spotify Account you can create a developer account [here](https://developer.spotify.com/dashboard). Create a new app on the dashboard (you can use http://localhost:3000/ as redirect link). Safely store your credentials inside the R enviornment. 
+
+We will use the spotifyr package to access the API. Use the `get_spotify_access_token()` function to create a Spotify access token from your credentials.
+
+*... \# your work here*
+```{r}
+access_token <- get_spotify_access_token()
+```
+
+We are going to analyze the features of the [Top 50 - Germany playlist](https://open.spotify.com/playlist/37i9dQZEVXbJiZcmkrIHGU) and [Top 50 - US playlist](https://open.spotify.com/playlist/37i9dQZEVXbLRQDuF5jeBp) playlist. You can find the right id in your browser link when opening the playlist. Use the `get_playlist_audio_features()` function.
+
+*... \# your work here*
+```{r}
+top50_germany_features <- get_playlist_audio_features(playlist_uris = "37i9dQZEVXbJiZcmkrIHGU")
+top50_us_features <- get_playlist_audio_features(playlist_uris = "37i9dQZEVXbLRQDuF5jeBp")
+```
+
+Plot the "danceability" versus the "speechiness" of tracks in the playlist for both countries. 
+*... \# your work here*
+```{r}
+ggplot() +
+  geom_point(data = top50_germany_features, aes(x = danceability, y = speechiness), color = "blue") +
+  geom_point(data = top50_us_features, aes(x = danceability, y = speechiness), color = "red") +
+  labs(x = "danceability", y = "speechiness") +
+  theme_minimal()
+
+```
+
+# Bonus: ChatGPT
+
+The ChatGPT API is not available for free. However, OpenAI typically provides users with some complimentary tokens for the initial weeks after sign-up. If you do not have access to free tokens, feel free to skip this exercise.
+
+To get started, you will need your API key found at the following https://platform.openai.com/account/api-keys. 
+
+Define a prompt you want to send to ChatGPT.
+
+*... \# your work here*
+```{r}
+prompt <- "Explain to me what APIs are."
+```
+
+Use the following `request` to send your prompt to the server.
+
+```{r}
+response <- request("https://api.openai.com/v1/chat/completions") %>% 
+  req_headers(Authorization = paste("Bearer", Sys.getenv("OPENAI_KEY"))) %>% 
+  req_body_json(list(
+    model = "gpt-3.5-turbo",
+    temperature = 1,
+    messages = list(list(
+      role = "user", 
+      content = prompt
+    ))
+  ))
+
+response %>% req_dry_run()
+```
+
+In both Python and R, various packages have emerged to streamline interactions with ChatGPT. Given the fast changing nature of this landscape, we encourage you to explore and discover your preferred solution that works best for your specific requirements and preferences.
